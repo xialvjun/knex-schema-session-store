@@ -1,0 +1,28 @@
+{
+  "name": "knex-schema-session-store",
+  "version": "0.0.1",
+  "description": "knex session store with schema",
+  "main": "lib/index.js",
+  "directories": {
+    "example": "examples",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xialvjun/knex-schema-session-store.git"
+  },
+  "keywords": [
+    "knex",
+    "session",
+    "store",
+    "schema"
+  ],
+  "author": "xialvjun@live.com",
+  "license": "MIT",
+  "dependencies": {
+    "@types/knex": "^0.0.46"
+  }
+}
