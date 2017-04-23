@@ -6,11 +6,12 @@ Store sessions in a database using knex, and keep the session table in user defi
 
 It stores session data in a [Knex](http://knexjs.org/) connected database. It split the session data to `with_schema` part and `no_schema` part. The `with_schema` part will be stored in relevant columns in database. The `no_schema` part will be stored in a text column in database.
 
-It expose 3 function:
+It expose functions:
 ```ts
-get(sid: string): Promise<any>
-set(sid: string, sess: any, max_age: number): Promise<void>
-destroy(sid: string): Promise<void>
+get(sid: string): Promise<void>;
+set(sid: string, sess: any, max_age?: number): Promise<void>;
+touch(sid: string, max_age?: number): Promise<void>;
+destroy(sid: string): Promise<void>;
 ```
 
 

@@ -35,25 +35,29 @@ class KnexSchemaSessionStore {
         if (this._synced) {
             return Promise.resolve();
         }
-        let p: Promise<any>;
+        let p = Promise.resolve();
         if (this._options.sync) {
-            p = Promise.resolve(this._knex.schema.createTableIfNotExists(
-                this._options.table_name,
-                (table) => {
-                    table.string(this._options.sid_name).primary();
-                    table.text(this._options.additional_name);
-                    table.timestamp(this._options.expire_at_name, true).index();
-                    if (this._options.timestamps) {
-                        table.timestamps();
+            let sync_p = this._knex.schema.hasTable(this._options.table_name)
+                .then(exists => {
+                    if (!exists) {
+                        return this._knex.schema.createTableIfNotExists(
+                            this._options.table_name,
+                            (table) => {
+                                table.string(this._options.sid_name).primary();
+                                table.text(this._options.additional_name);
+                                table.bigInteger(this._options.expire_at_name).index();
+                                if (this._options.timestamps) {
+                                    table.timestamps();
+                                }
+                                this._options.schemas.forEach(sf => {
+                                    let cb = table[sf.type](sf.name, ...sf.args);
+                                    typeof sf.extra === 'function' ? sf.extra(cb) : null;
+                                });
+                            }
+                        );
                     }
-                    this._options.schemas.forEach(sf => {
-                        let cb = table[sf.type](sf.name, ...sf.args);
-                        typeof sf.extra === 'function' ? sf.extra(cb) : null;
-                    });
-                })
-            );
-        } else {
-            p = Promise.resolve();
+                });
+            p = Promise.resolve(sync_p);
         }
         return p.then(() => {
             this._synced = true;
@@ -61,7 +65,7 @@ class KnexSchemaSessionStore {
         });
     }
 
-    get(sid) {
+    get(sid: string) {
         return this.connect().then(() => {
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
@@ -85,7 +89,8 @@ class KnexSchemaSessionStore {
 
             let additional = Object.assign({}, sess, this._filter_static_field);
             let update_data = { [this._options.additional_name]: JSON.stringify(additional), [this._options.expire_at_name]: expire_at };
-            this._options.schemas.forEach(sf => update_data[sf.name] = sess[sf.name]);
+            // knex need to set a field to null to clear the field. If it's undefined, it will ignore that field, which is not what we want.
+            this._options.schemas.forEach(sf => update_data[sf.name] = sess[sf.name]===undefined ? null : sess[sf.name]);
 
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
@@ -102,7 +107,16 @@ class KnexSchemaSessionStore {
         });
     }
 
-    destroy(sid) {
+    touch(sid: string, max_age: number = this._options.max_age) {
+        return this.connect().then(() => {
+            let expire_at = Date.now() + Math.max(max_age, 0);
+            return this._knex(this._options.table_name)
+                .where(this._options.sid_name, sid)
+                .update({ [this._options.expire_at_name]: expire_at });
+        });
+    }
+
+    destroy(sid: string) {
         return this.connect().then(() => {
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
