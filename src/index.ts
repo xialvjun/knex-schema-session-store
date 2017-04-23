@@ -50,7 +50,12 @@ class KnexSchemaSessionStore {
                                     table.timestamps();
                                 }
                                 this._options.schemas.forEach(sf => {
-                                    let cb = table[sf.type](sf.name, ...sf.args);
+                                    let cb;
+                                    if (Object.prototype.toString.call(sf.args)==='[object Array]') {
+                                        cb = table[sf.type](sf.name, ...sf.args);
+                                    } else {
+                                        cb = table[sf.type](sf.name);
+                                    }
                                     typeof sf.extra === 'function' ? sf.extra(cb) : null;
                                 });
                             }
