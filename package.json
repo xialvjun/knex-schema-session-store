@@ -1,6 +1,6 @@
 {
   "name": "knex-schema-session-store",
-  "version": "0.0.1",
+  "version": "0.5.0",
   "description": "knex session store with schema",
   "main": "lib/index.js",
   "directories": {

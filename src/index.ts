@@ -1,6 +1,6 @@
 import * as Knex from 'knex';
 
-class KnexSchemaSessionStore {
+export class KnexSchemaSessionStore {
     private _knex: Knex
     private _options: Options
     private _synced: boolean = false
