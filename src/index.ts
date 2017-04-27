@@ -51,7 +51,7 @@ class KnexSchemaSessionStore {
                                 }
                                 this._options.schemas.forEach(sf => {
                                     let cb;
-                                    if (Object.prototype.toString.call(sf.args)==='[object Array]') {
+                                    if (Object.prototype.toString.call(sf.args) === '[object Array]') {
                                         cb = table[sf.type](sf.name, ...sf.args);
                                     } else {
                                         cb = table[sf.type](sf.name);
@@ -79,7 +79,12 @@ class KnexSchemaSessionStore {
                 .then(rows => {
                     if (rows && rows.length > 0) {
                         let row = rows[0];
-                        let { [this._options.sid_name]: sid, [this._options.additional_name]: additional, ...schemas_session } = row;
+                        let additional = row[this._options.additional_name];
+                        let schemas_session = this._options.schemas.map(sf => sf.name).reduce((acc, cv) => {
+                            acc[cv] = row[cv];
+                            return acc;
+                        }, {});
+                        // let { [this._options.sid_name]: sid, [this._options.additional_name]: additional, [this._options.expire_at_name]: expire_at, ...schemas_session } = row;
                         additional = JSON.parse(additional || '{}');
                         return Object.assign({}, additional, schemas_session);
                     }
@@ -95,7 +100,7 @@ class KnexSchemaSessionStore {
             let additional = Object.assign({}, sess, this._filter_static_field);
             let update_data = { [this._options.additional_name]: JSON.stringify(additional), [this._options.expire_at_name]: expire_at };
             // knex need to set a field to null to clear the field. If it's undefined, it will ignore that field, which is not what we want.
-            this._options.schemas.forEach(sf => update_data[sf.name] = sess[sf.name]===undefined ? null : sess[sf.name]);
+            this._options.schemas.forEach(sf => update_data[sf.name] = sess[sf.name] === undefined ? null : sess[sf.name]);
 
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
@@ -135,6 +140,10 @@ class KnexSchemaSessionStore {
                 .where(this._options.expire_at_name, '<=', Date.now())
                 .del();
         });
+    }
+
+    clear() {
+        return this.connect().then(() => this._knex(this._options.table_name).del());
     }
 
     repo() {
