@@ -12,10 +12,16 @@ It stores session data in a [Knex](http://knexjs.org/) connected database. It sp
 
 It expose functions:
 ```ts
-get(sid: string): Promise<void>;
+constructor(knex: Knex, options?: Options);
+
+wait_for_sync(): Promise<void>;
+get(sid: string): Promise<any>;
 set(sid: string, sess: any, max_age?: number): Promise<void>;
 touch(sid: string, max_age?: number): Promise<void>;
 destroy(sid: string): Promise<void>;
+gc(): Promise<void>;
+clear(): Promise<void>;
+repo(): Knex.QueryBuilder;
 ```
 
 
@@ -27,14 +33,15 @@ destroy(sid: string): Promise<void>;
 ### Example
 
 ```ts
-import KnexSchemaSessionStore from 'knex-schema-session-store';
+import Store from 'knex-schema-session-store';
 
-const StoreOption = {
+const StoreOptions = {
     table_name: 'sessions',
     sid_name: 'sid',
     expire_at_name: 'expire_at',
     additional_name: 'additional',
     sync: true,
+    sync_timeout: 3000,
     gc_interval: 1000 * 60 * 60,
     timestamps: false,
     max_age: 1000 * 60 * 60 * 24,
@@ -43,9 +50,13 @@ const StoreOption = {
 
 StoreOptions.schemas.push({name: 'user_id', type: 'string', args: [100], extra: cb => cb.notNullable()});
 
-app.use(session({
-    store: new KnexSchemaSessionStore(knex, StoreOption)
-)});
+const store = new Store(knex, StoreOption)
+
+app.use(session({ store }));
+
+store.wait_for_sync().then(() => {
+    app.listen(3000);
+});
 ```
 
 ### Options
@@ -60,11 +71,13 @@ interface Options {
     expire_at_name?: string
     // Name of the `no_schema` part column in the table (default: `additional`)
     additional_name?: string
-    // If true, the table will have `updated_at` and `created_at` columns. (default: `false`)
+    // If true, the table will have `updated_at` and `created_at` columns (default: `false`)
     timestamps?: boolean
     // Create the sessions table if it doesn’t exist (default: `true`)
     sync?: boolean
-    // Do garbage collection every gc_interval(in milliseconds, default: 1000 * 60 * 60, aka an hour)
+    // If we create the sessions table, how long will we wait (in milliseconds, default: 3000)
+    sync_timeout?: number
+    // Do garbage collection every gc_interval (in milliseconds, default: 1000 * 60 * 60, aka an hour)
     gc_interval?: number
     // If the session package doesn't pass a max_age to this store, how long will this package remember the session(in milliseconds, default: 1000 * 60 * 60 * 24, aka one day)
     max_age?: number,

@@ -1,10 +1,13 @@
 import * as Knex from 'knex';
+// import * as assert from 'assert';
+
+
 
 export class KnexSchemaSessionStore {
     private _knex: Knex
     private _options: Options
     private _synced: boolean = false
-    private _filter_static_field: object
+    private _static_field: object
 
     constructor(knex: Knex, options?: Options) {
         this._knex = knex;
@@ -16,6 +19,7 @@ export class KnexSchemaSessionStore {
             additional_name: 'additional',
             timestamps: false,
             sync: true,
+            sync_timeout: 1000 * 3,
             gc_interval: 1000 * 60 * 60,
             max_age: 1000 * 60 * 60 * 24,
             schemas: [],
@@ -25,13 +29,15 @@ export class KnexSchemaSessionStore {
         if (this._options.timestamps) {
             occupied_fields.push('created_at', 'updated_at');
         }
-        this._filter_static_field = occupied_fields.reduce((acc, cv) => {
+        this._static_field = occupied_fields.reduce((acc, cv) => {
             acc[cv] = undefined;
             return acc;
         }, {});
+
+        this.connect();
     }
 
-    connect() {
+    private connect() {
         if (this._synced) {
             return Promise.resolve();
         }
@@ -70,8 +76,12 @@ export class KnexSchemaSessionStore {
         });
     }
 
-    get(sid: string) {
-        return this.connect().then(() => {
+    wait_for_sync() {
+        return interval_check(() => this._synced, 100, this._options.sync_timeout, new Error(`Timeout Error on Syncing To Database!`));
+    }
+
+    get(sid: string): Promise<any> {
+        return this.wait_for_sync().then(() => {
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
                 .andWhere(this._options.expire_at_name, '>', Date.now())
@@ -94,10 +104,10 @@ export class KnexSchemaSessionStore {
     }
 
     set(sid: string, sess: any, max_age: number = this._options.max_age) {
-        return this.connect().then(() => {
+        return this.wait_for_sync().then(() => {
             let expire_at = Date.now() + Math.max(max_age, 0);
 
-            let additional = Object.assign({}, sess, this._filter_static_field);
+            let additional = Object.assign({}, sess, this._static_field);
             let update_data = { [this._options.additional_name]: JSON.stringify(additional), [this._options.expire_at_name]: expire_at };
             // knex need to set a field to null to clear the field. If it's undefined, it will ignore that field, which is not what we want.
             this._options.schemas.forEach(sf => update_data[sf.name] = sess[sf.name] === undefined ? null : sess[sf.name]);
@@ -118,7 +128,7 @@ export class KnexSchemaSessionStore {
     }
 
     touch(sid: string, max_age: number = this._options.max_age) {
-        return this.connect().then(() => {
+        return this.wait_for_sync().then(() => {
             let expire_at = Date.now() + Math.max(max_age, 0);
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
@@ -127,7 +137,7 @@ export class KnexSchemaSessionStore {
     }
 
     destroy(sid: string) {
-        return this.connect().then(() => {
+        return this.wait_for_sync().then(() => {
             return this._knex(this._options.table_name)
                 .where(this._options.sid_name, sid)
                 .del();
@@ -135,7 +145,7 @@ export class KnexSchemaSessionStore {
     }
 
     gc() {
-        return this.connect().then(() => {
+        return this.wait_for_sync().then(() => {
             return this._knex(this._options.table_name)
                 .where(this._options.expire_at_name, '<=', Date.now())
                 .del();
@@ -143,13 +153,14 @@ export class KnexSchemaSessionStore {
     }
 
     clear() {
-        return this.connect().then(() => this._knex(this._options.table_name).del());
+        return this.wait_for_sync().then(() => this._knex(this._options.table_name).del());
     }
 
     repo() {
         return this._knex(this._options.table_name);
     }
 }
+
 
 
 export default KnexSchemaSessionStore;
@@ -161,6 +172,7 @@ export interface Options {
     additional_name?: string,
     timestamps?: boolean,
     sync?: boolean,
+    sync_timeout?: number,
     gc_interval?: number,
     max_age?: number,
     schemas?: SchemaField[],
@@ -171,4 +183,22 @@ export interface SchemaField {
     type: string,
     args?: any[],
     extra?: (cb: Knex.ColumnBuilder) => void,
+}
+
+function interval_check(check: ()=>boolean, interval: number, timeout: number, timeout_error: Error) {
+    if (check()) {
+        return Promise.resolve();
+    }
+    return new Promise<void>((resolve, reject) => {
+        let tout = setTimeout(() => {
+            clearInterval(tint);
+            reject(timeout_error);
+        }, timeout);
+        let tint = setInterval(() => {
+            if (check()) {
+                clearTimeout(tout);
+                resolve();
+            }
+        }, interval);
+    });
 }
